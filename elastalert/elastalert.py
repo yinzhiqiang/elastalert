@@ -799,6 +799,10 @@ class ElastAlerter():
 
         # Process any new matches
         num_matches = len(rule['type'].matches)
+
+        # Mark this endtime for next run's start
+        rule['previous_endtime'] = endtime
+
         while rule['type'].matches:
             match = rule['type'].matches.pop(0)
             match['num_hits'] = self.num_hits
@@ -837,9 +841,6 @@ class ElastAlerter():
 
             # Add it as an aggregated match
             self.add_aggregated_alert(match, rule)
-
-        # Mark this endtime for next run's start
-        rule['previous_endtime'] = endtime
 
         time_taken = time.time() - run_start
         # Write to ES that we've run this rule against this time period
