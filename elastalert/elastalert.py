@@ -85,7 +85,7 @@ class ElastAlerter():
                             type=parse_duration,
                             default=datetime.timedelta(),
                             help='Maximum time to wait for ElasticSearch to become responsive.  Usage: '
-                            '--patience <units>=<number>. e.g. --patience minutes=5')
+                                 '--patience <units>=<number>. e.g. --patience minutes=5')
         parser.add_argument(
             '--pin_rules',
             action='store_true',
@@ -603,6 +603,8 @@ class ElastAlerter():
         try:
             if rule.get('scroll_id') and self.num_hits < self.total_hits:
                 self.run_query(rule, start, end, scroll=True)
+                rule['querystart'] = start
+                rule['queryend'] = end
         except RuntimeError:
             # It's possible to scroll far enough to hit max recursive depth
             pass
@@ -677,7 +679,7 @@ class ElastAlerter():
     def adjust_start_time_for_overlapping_agg_query(self, rule):
         if rule.get('aggregation_query_element'):
             if rule.get('allow_buffer_time_overlap') and not rule.get('use_run_every_query_size') and (
-                    rule['buffer_time'] > rule['run_every']):
+                        rule['buffer_time'] > rule['run_every']):
                 rule['starttime'] = rule['starttime'] - (rule['buffer_time'] - rule['run_every'])
                 rule['original_starttime'] = rule['starttime']
 
@@ -781,12 +783,16 @@ class ElastAlerter():
             tmp_endtime = tmp_endtime + segment_size
             if not self.run_query(rule, rule['starttime'], tmp_endtime):
                 return 0
+            rule['querystart'] = rule['starttime']
+            rule['queryend'] = tmp_endtime
             rule['starttime'] = tmp_endtime
             rule['type'].garbage_collect(tmp_endtime)
 
         if rule.get('aggregation_query_element'):
             if endtime - tmp_endtime == segment_size:
                 self.run_query(rule, tmp_endtime, endtime)
+                rule['querystart'] = tmp_endtime
+                rule['queryend'] = endtime
             elif total_seconds(rule['original_starttime'] - tmp_endtime) == 0:
                 rule['starttime'] = rule['original_starttime']
                 return 0
@@ -795,14 +801,12 @@ class ElastAlerter():
         else:
             if not self.run_query(rule, rule['starttime'], endtime):
                 return 0
+            rule['querystart'] = rule['starttime']
+            rule['queryend'] = endtime
             rule['type'].garbage_collect(endtime)
 
         # Process any new matches
         num_matches = len(rule['type'].matches)
-
-        # Mark this endtime for next run's start
-        rule['previous_endtime'] = endtime
-
         while rule['type'].matches:
             match = rule['type'].matches.pop(0)
             match['num_hits'] = self.num_hits
@@ -841,6 +845,9 @@ class ElastAlerter():
 
             # Add it as an aggregated match
             self.add_aggregated_alert(match, rule)
+
+        # Mark this endtime for next run's start
+        rule['previous_endtime'] = endtime
 
         time_taken = time.time() - run_start
         # Write to ES that we've run this rule against this time period
@@ -1335,7 +1342,7 @@ class ElastAlerter():
         # Write the alert(s) to ES
         agg_id = None
         for match in matches:
-            alert_body = self.get_alert_body(match, rule, alert_sent, alert_time, alert_exception)
+            alert_body = self. (match, rule, alert_sent, alert_time, alert_exception)
             # Set all matches to aggregate together
             if agg_id:
                 alert_body['aggregate_id'] = agg_id
