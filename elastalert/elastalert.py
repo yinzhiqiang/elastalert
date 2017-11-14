@@ -1342,7 +1342,7 @@ class ElastAlerter():
         # Write the alert(s) to ES
         agg_id = None
         for match in matches:
-            alert_body = self. (match, rule, alert_sent, alert_time, alert_exception)
+            alert_body = self.get_alert_body(match, rule, alert_sent, alert_time, alert_exception)
             # Set all matches to aggregate together
             if agg_id:
                 alert_body['aggregate_id'] = agg_id
