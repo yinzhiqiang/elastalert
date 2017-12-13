@@ -559,7 +559,7 @@ class ElastAlerter():
         if rule.get('query_delay'):
             buffer_time += rule['query_delay']
         for _id, timestamp in rule['processed_hits'].iteritems():
-            if now - timestamp > buffer_time:
+            if now - timestamp.replace(tzinfo=None) > buffer_time:
                 remove.append(_id)
         map(rule['processed_hits'].pop, remove)
 
