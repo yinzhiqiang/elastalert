@@ -33,6 +33,7 @@ from util import ts_now
 from util import ts_to_dt
 from prettytable import PrettyTable
 
+
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
         if hasattr(obj, 'isoformat'):
@@ -125,7 +126,8 @@ class BasicMatchString(object):
             return json.dumps(blob, cls=DateTimeEncoder, sort_keys=True, indent=4, ensure_ascii=False)
         except UnicodeDecodeError:
             # This blob contains non-unicode, so lets pretend it's Latin-1 to show something
-            return json.dumps(blob, cls=DateTimeEncoder, sort_keys=True, indent=4, encoding='Latin-1', ensure_ascii=False)
+            return json.dumps(blob, cls=DateTimeEncoder, sort_keys=True, indent=4, encoding='Latin-1',
+                              ensure_ascii=False)
 
     def __str__(self):
         self.text = ''
@@ -237,59 +239,82 @@ class Alerter(object):
         return alert_subject
 
     def create_alert_body(self, matches):
-        body = self.get_aggregation_summary_text(matches)
-        for match in matches:
-            body += unicode(BasicMatchString(self.rule, match))
-            # Separate text of aggregated alerts with dashes
-            if len(matches) > 1:
-                body += '\n----------------------------------------\n'
-        return body
-
-    def get_aggregation_summary_text__maximum_width(self):
-        """Get maximum width allowed for summary text."""
-        return 80
-
-    def get_aggregation_summary_text(self, matches):
-        text = ''
-        if 'aggregation' in self.rule and 'summary_table_fields' in self.rule:
-            summary_table_fields = self.rule['summary_table_fields']
-            if not isinstance(summary_table_fields, list):
-                summary_table_fields = [summary_table_fields]
-            # Include a count aggregation so that we can see at a glance how many of each aggregation_key were encountered
-            summary_table_fields_with_count = summary_table_fields + ['count']
-            text += "Aggregation resulted in the following data for summary_table_fields ==> {0}:\n\n".format(
-                summary_table_fields_with_count
-            )
-            text_table = PrettyTable()
-            text_table._set_field_names(summary_table_fields_with_count)
-            match_aggregation = {}
-
-            # Maintain an aggregate count for each unique key encountered in the aggregation period
+        if 'alert_template' in self.rule:
+            template = unicode(self.rule['alert_template'])
+            summary = self.get_aggregation_summary_text(matches)
+            deatils = ''
             for match in matches:
-                key_tuple = tuple([unicode(lookup_es_key(match, key)) for key in summary_table_fields])
-                if key_tuple not in match_aggregation:
-                    match_aggregation[key_tuple] = 1
-                else:
-                    match_aggregation[key_tuple] = match_aggregation[key_tuple] + 1
-            for keys, count in match_aggregation.iteritems():
-                text_table.add_row([key for key in keys] + [count])
-            text +="<br><br>"+ text_table.get_html_string() + "<br><br>"
+                deatils += unicode(BasicMatchString(self.rule, match))
+                # Separate text of aggregated alerts with dashes
+                if len(matches) > 1:
+                    deatils += '\n----------------------------------------\n'
+            alert_template_values = [summary,deatils]
+            return template.format(*alert_template_values)
 
-        return text
+        else:
+            body = self.get_aggregation_summary_text(matches)
+            for match in matches:
+                body += unicode(BasicMatchString(self.rule, match))
+                # Separate text of aggregated alerts with dashes
+                if len(matches) > 1:
+                    body += '\n----------------------------------------\n'
+            return body
 
-    def create_default_title(self, matches):
-        return self.rule['name']
 
-    def get_account(self, account_file):
-        """ Gets the username and password from an account file.
+def get_aggregation_summary_text__maximum_width(self):
+    """Get maximum width allowed for summary text."""
+    return 80
 
-        :param account_file: Name of the file which contains user and password information.
-        """
-        account_conf = yaml_loader(account_file)
-        if 'user' not in account_conf or 'password' not in account_conf:
-            raise EAException('Account file must have user and password fields')
-        self.user = account_conf['user']
-        self.password = account_conf['password']
+
+def get_aggregation_summary_text(self, matches):
+    text = ''
+    if 'aggregation' in self.rule and 'summary_table_fields' in self.rule:
+        summary_table_fields = self.rule['summary_table_fields']
+        if not isinstance(summary_table_fields, list):
+            summary_table_fields = [summary_table_fields]
+
+        summary_table_headers = self.rule['summary_table_headers']
+        if not isinstance(summary_table_headers, list):
+            summary_table_headers = [summary_table_headers]
+
+        # Include a count aggregation so that we can see at a glance how many of each aggregation_key were encountered
+        # summary_table_fields_with_count = summary_table_fields + ['count']
+        summary_table_headers_with_count = summary_table_headers + ['count']
+        # text += "Aggregation resulted in the following data for summary_table_fields ==> {0}:\n\n".format(
+        #     summary_table_fields_with_count
+        # )
+        text_table = PrettyTable()
+        text_table._set_field_names(summary_table_headers_with_count)
+        match_aggregation = {}
+
+        # Maintain an aggregate count for each unique key encountered in the aggregation period
+        for match in matches:
+            key_tuple = tuple([unicode(lookup_es_key(match, key)) for key in summary_table_fields])
+            if key_tuple not in match_aggregation:
+                match_aggregation[key_tuple] = 1
+            else:
+                match_aggregation[key_tuple] = match_aggregation[key_tuple] + 1
+        for keys, count in match_aggregation.iteritems():
+            text_table.add_row([key for key in keys] + [count])
+        text += "<br><br>" + text_table.get_html_string() + "<br><br>"
+
+    return text
+
+
+def create_default_title(self, matches):
+    return self.rule['name']
+
+
+def get_account(self, account_file):
+    """ Gets the username and password from an account file.
+
+    :param account_file: Name of the file which contains user and password information.
+    """
+    account_conf = yaml_loader(account_file)
+    if 'user' not in account_conf or 'password' not in account_conf:
+        raise EAException('Account file must have user and password fields')
+    self.user = account_conf['user']
+    self.password = account_conf['password']
 
 
 class StompAlerter(Alerter):
@@ -307,7 +332,8 @@ class StompAlerter(Alerter):
 
             if resmatch is not None:
                 elastalert_logger.info(
-                    'Alert for %s, %s at %s:' % (self.rule['name'], resmatch, lookup_es_key(match, self.rule['timestamp_field'])))
+                    'Alert for %s, %s at %s:' % (
+                    self.rule['name'], resmatch, lookup_es_key(match, self.rule['timestamp_field'])))
                 alerts.append(
                     '1)Alert for %s, %s at %s:' % (self.rule['name'], resmatch, lookup_es_key(
                         match, self.rule['timestamp_field']))
@@ -357,9 +383,11 @@ class DebugAlerter(Alerter):
         for match in matches:
             if qk in match:
                 elastalert_logger.info(
-                    'Alert for %s, %s at %s:' % (self.rule['name'], match[qk], lookup_es_key(match, self.rule['timestamp_field'])))
+                    'Alert for %s, %s at %s:' % (
+                    self.rule['name'], match[qk], lookup_es_key(match, self.rule['timestamp_field'])))
             else:
-                elastalert_logger.info('Alert for %s at %s:' % (self.rule['name'], lookup_es_key(match, self.rule['timestamp_field'])))
+                elastalert_logger.info(
+                    'Alert for %s at %s:' % (self.rule['name'], lookup_es_key(match, self.rule['timestamp_field'])))
             elastalert_logger.info(unicode(BasicMatchString(self.rule, match)))
 
     def get_info(self):
@@ -416,7 +444,12 @@ class EmailAlerter(Alerter):
                 to_addr = recipient
                 if 'email_add_domain' in self.rule:
                     to_addr = [name + self.rule['email_add_domain'] for name in to_addr]
-        email_msg = MIMEText(body.encode('UTF-8'), 'html', _charset='UTF-8')
+
+        if self.rule.get('email_mime_type') == 'html':
+            email_msg = MIMEText(body.encode('UTF-8'), 'html', _charset='UTF-8')
+        else:
+            email_msg = MIMEText(body.encode('UTF-8'), _charset='UTF-8')
+
         email_msg['Subject'] = self.create_title(matches)
         email_msg['To'] = ', '.join(to_addr)
         email_msg['From'] = self.from_addr
@@ -431,7 +464,8 @@ class EmailAlerter(Alerter):
         try:
             if self.smtp_ssl:
                 if self.smtp_port:
-                    self.smtp = SMTP_SSL(self.smtp_host, self.smtp_port, keyfile=self.smtp_key_file, certfile=self.smtp_cert_file)
+                    self.smtp = SMTP_SSL(self.smtp_host, self.smtp_port, keyfile=self.smtp_key_file,
+                                         certfile=self.smtp_cert_file)
                 else:
                     self.smtp = SMTP_SSL(self.smtp_host, keyfile=self.smtp_key_file, certfile=self.smtp_cert_file)
             else:
@@ -608,7 +642,8 @@ class JiraAlerter(Alerter):
         # If the schema information is not available, raise an exception since we don't know how to set it
         # Note this is only the case for two built-in types, id: issuekey and id: thumbnail
         if not ('schema' in field or 'type' in field['schema']):
-            raise Exception("Could not determine schema information for the jira field '{0}'".format(normalized_jira_field))
+            raise Exception(
+                "Could not determine schema information for the jira field '{0}'".format(normalized_jira_field))
         arg_type = field['schema']['type']
 
         # Handle arrays of simple types like strings or numbers
@@ -622,7 +657,8 @@ class JiraAlerter(Alerter):
             if array_items in ['string', 'date', 'datetime']:
                 # Special case for multi-select custom types (the JIRA metadata says that these are strings, but
                 # in reality, they are required to be provided as an object.
-                if 'custom' in field['schema'] and field['schema']['custom'] in self.custom_string_types_with_special_handling:
+                if 'custom' in field['schema'] and field['schema'][
+                    'custom'] in self.custom_string_types_with_special_handling:
                     self.jira_args[arg_name] = [{'value': v} for v in value]
                 else:
                     self.jira_args[arg_name] = value
@@ -642,7 +678,8 @@ class JiraAlerter(Alerter):
             if arg_type in ['string', 'date', 'datetime']:
                 # Special case for custom types (the JIRA metadata says that these are strings, but
                 # in reality, they are required to be provided as an object.
-                if 'custom' in field['schema'] and field['schema']['custom'] in self.custom_string_types_with_special_handling:
+                if 'custom' in field['schema'] and field['schema'][
+                    'custom'] in self.custom_string_types_with_special_handling:
                     self.jira_args[arg_name] = {'value': value}
                 else:
                     self.jira_args[arg_name] = value
@@ -764,7 +801,7 @@ class JiraAlerter(Alerter):
                         # Re-raise the exception, preserve the stack-trace, and give some
                         # context as to which watcher failed to be added
                         raise Exception(
-                            "Exception encountered when trying to add '{0}' as a watcher. Does the user exist?\n{1}" .format(
+                            "Exception encountered when trying to add '{0}' as a watcher. Does the user exist?\n{1}".format(
                                 watcher,
                                 ex
                             )), None, sys.exc_info()[2]
@@ -997,7 +1034,8 @@ class MsTeamsAlerter(Alerter):
 
         for url in self.ms_teams_webhook_url:
             try:
-                response = requests.post(url, data=json.dumps(payload, cls=DateTimeEncoder), headers=headers, proxies=proxies)
+                response = requests.post(url, data=json.dumps(payload, cls=DateTimeEncoder), headers=headers,
+                                         proxies=proxies)
                 response.raise_for_status()
             except RequestException as e:
                 raise EAException("Error posting to ms teams: %s" % e)
@@ -1075,7 +1113,8 @@ class SlackAlerter(Alerter):
 
         for url in self.slack_webhook_url:
             try:
-                response = requests.post(url, data=json.dumps(payload, cls=DateTimeEncoder), headers=headers, proxies=proxies)
+                response = requests.post(url, data=json.dumps(payload, cls=DateTimeEncoder), headers=headers,
+                                         proxies=proxies)
                 response.raise_for_status()
             except RequestException as e:
                 raise EAException("Error posting to slack: %s" % e)
@@ -1242,7 +1281,8 @@ class VictorOpsAlerter(Alerter):
         }
 
         try:
-            response = requests.post(self.url, data=json.dumps(payload, cls=DateTimeEncoder), headers=headers, proxies=proxies)
+            response = requests.post(self.url, data=json.dumps(payload, cls=DateTimeEncoder), headers=headers,
+                                     proxies=proxies)
             response.raise_for_status()
         except RequestException as e:
             raise EAException("Error posting to VictorOps: %s" % e)
@@ -1285,7 +1325,8 @@ class TelegramAlerter(Alerter):
         }
 
         try:
-            response = requests.post(self.url, data=json.dumps(payload, cls=DateTimeEncoder), headers=headers, proxies=proxies)
+            response = requests.post(self.url, data=json.dumps(payload, cls=DateTimeEncoder), headers=headers,
+                                     proxies=proxies)
             warnings.resetwarnings()
             response.raise_for_status()
         except RequestException as e:
@@ -1322,7 +1363,8 @@ class GitterAlerter(Alerter):
         }
 
         try:
-            response = requests.post(self.gitter_webhook_url, json.dumps(payload, cls=DateTimeEncoder), headers=headers, proxies=proxies)
+            response = requests.post(self.gitter_webhook_url, json.dumps(payload, cls=DateTimeEncoder), headers=headers,
+                                     proxies=proxies)
             response.raise_for_status()
         except RequestException as e:
             raise EAException("Error posting to Gitter: %s" % e)
@@ -1464,21 +1506,21 @@ class StrideAlerter(Alerter):
         # set https proxy, if it was provided
         proxies = {'https': self.stride_proxy} if self.stride_proxy else None
         payload = {
-          "body": {
-            "content": [
-              {
+            "body": {
                 "content": [
-                  {
-                    "text": body,
-                    "type": "text"
-                  }
+                    {
+                        "content": [
+                            {
+                                "text": body,
+                                "type": "text"
+                            }
+                        ],
+                        "type": "paragraph"
+                    }
                 ],
-                "type": "paragraph"
-              }
-            ],
-            "version": 1,
-            "type": "doc"
-          }
+                "version": 1,
+                "type": "doc"
+            }
         }
 
         try:
