@@ -296,7 +296,7 @@ def get_aggregation_summary_text(self, matches):
                 match_aggregation[key_tuple] = match_aggregation[key_tuple] + 1
         for keys, count in match_aggregation.iteritems():
             text_table.add_row([key for key in keys] + [count])
-        text += "<br><br>" + text_table.get_html_string() + "<br><br>"
+        text += "<br><br>" + text_table.get_html_string((attributes={"name":"summaryTable", "class":"summaryTable"}) + "<br><br>"
 
     return text
 
